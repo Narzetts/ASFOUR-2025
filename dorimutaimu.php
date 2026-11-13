@@ -1,4 +1,6 @@
 <?php
+define('APP_VERSION', '1.0.0');
+
 session_start();
 if (!isset($_SESSION['admin'])) {
     header("Location: futaridakeno.php");
@@ -122,6 +124,10 @@ echo date('Y-m-d H:i:s');
         </table>
     </div>
 </div>
+
+<footer style="text-align:center; padding:12px; font-size:11px; color:#aaa; margin-top:20px;">
+    ASFOUR &copy; 2025 &mdash; v<?php echo APP_VERSION; ?>
+</footer>
 
 </body>
 </html>

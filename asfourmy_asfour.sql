@@ -6,6 +6,14 @@
 -- Waktu pembuatan: 25 Jun 2025 pada 03.48
 -- Versi server: 10.4.32-MariaDB
 -- Versi PHP: 8.2.12
+--
+-- ============================================================
+-- ASFOUR v1.0.0 — Aspiration of Four MMXXV
+-- Database: asfourmy_asfour
+-- Versi Aplikasi  : 1.0.0
+-- Tanggal Rilis   : 2026-11-14
+-- Dibuat dengan   : phpMyAdmin 5.2.1 / MariaDB 10.4.32
+-- ============================================================
 
 SET SQL_MODE = "NO_AUTO_VALUE_ON_ZERO";
 START TRANSACTION;
