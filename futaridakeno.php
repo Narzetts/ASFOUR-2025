@@ -61,6 +61,15 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             unset($_SESSION[$lock_key]);
             session_regenerate_id(true);            // cegah session fixation
             $_SESSION["admin"] = $user["username"];
+
+            // --- [LOG] Catat aktivitas login ---
+            $log_stmt = $conn->prepare("INSERT INTO log_aktivitas (username, aktivitas, waktu, waktu_login) VALUES (?, 'Login admin berhasil', NOW(), NOW())");
+            if ($log_stmt) {
+                $log_stmt->bind_param("s", $user["username"]);
+                $log_stmt->execute();
+                $log_stmt->close();
+            }
+
             $conn->close();
             header("Location: dorimutaimu.php");
             exit;

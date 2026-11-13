@@ -154,12 +154,15 @@ Menyimpan seluruh data aspirasi yang masuk dari publik.
 |-------|------|-----------|
 | `id` | INT(11) AUTO_INCREMENT | Primary Key |
 | `makanan` | VARCHAR(255) | Kategori pengisi: Guru / Siswa / Warga Sekolah / Umum |
-| `makan_perhari` | VARCHAR(255) | Angkatan (A'23, A'24, A'25) — opsional, hanya untuk Siswa |
-| `pengalaman` | TEXT | Isi teks aspirasi |
+| `makan_perhari` | VARCHAR(255) | Angkatan (A'23 s.d. A'26) — khusus untuk kategori Siswa |
+| `pengalaman` | TEXT | Isi teks aspirasi (10 - 1000 karakter) |
 | `foto` | VARCHAR(255) | Nama file gambar yang diupload (disimpan di `uploads/`) |
+| `status` | VARCHAR(50) | Status aspirasi: `Baru` (default), `Dibaca`, `Ditindaklanjuti` |
+| `kode_tiket` | VARCHAR(30) | Kode unik tiket pelacakan (mis. `ASF-A1B2C3`) |
+| `anonim` | TINYINT(1) | `1` jika pengirim memilih anonim, `0` jika biasa |
 | `tanggal` | TIMESTAMP | Waktu submit (auto, timezone server) |
 | `waktu` | DATETIME | Waktu submit (auto, timezone server) |
-| `ip_address` | VARCHAR(45) | IP address pengisi |
+| `ip_address` | VARCHAR(45) | IP address pengisi (dipakai untuk rate limiting anti-spam) |
 
 > [!NOTE]
 > Kolom `makanan` dan `makan_perhari` menggunakan nama kolom bawaan dari template database lama. Secara fungsional, `makanan` = **kategori pengisi** dan `makan_perhari` = **angkatan siswa**.
@@ -167,14 +170,14 @@ Menyimpan seluruh data aspirasi yang masuk dari publik.
 ---
 
 ### Tabel `log_aktivitas`
-Tabel log untuk mencatat aktivitas admin (tersedia di DB, belum diimplementasikan di kode).
+Mencatat seluruh rekam jejak aktivitas administrator demi transparansi dan audit sistem.
 
 | Kolom | Tipe | Keterangan |
 |-------|------|-----------|
 | `id` | INT(11) AUTO_INCREMENT | Primary Key |
 | `username` | VARCHAR(100) | Username admin yang beraktivitas |
-| `aktivitas` | TEXT | Deskripsi aktivitas |
-| `waktu` | DATETIME | Waktu aktivitas |
+| `aktivitas` | TEXT | Deskripsi aksi (login, logout, hapus, ubah status, ekspor, ganti password) |
+| `waktu` | DATETIME | Waktu aktivitas dilakukan |
 | `waktu_login` | DATETIME | Waktu login sesi |
 
 ---
@@ -452,16 +455,15 @@ Sesi admin akan dihapus dan Anda diarahkan kembali ke halaman login.
 | Endpoint | Method | Deskripsi | Akses |
 |----------|--------|-----------|-------|
 | `index.html` | GET | Halaman publik (landing + form aspirasi) | Publik |
-| `proses.php` | POST | Memproses & menyimpan data aspirasi | Publik |
-| `terimakasih.html` | GET | Halaman konfirmasi setelah submit | Publik |
-| `futaridakeno.php` | GET/POST | Halaman & proses login admin | Admin |
-| `dorimutaimu.php` | GET | Dashboard admin (lihat data, hapus) | Admin (session) |
-| `dorimutaimu.php?delete={id}` | GET | Hapus entri aspirasi berdasarkan ID | Admin (session) |
-| `export_excel.php` | GET | Generate & download file Excel | Admin (session)* |
-| `mirakuru.php` | GET | Logout admin | Admin |
-
-> [!NOTE]
-> `export_excel.php` saat ini tidak memiliki pengecekan sesi — siapapun yang mengetahui URL-nya dapat mengunduh data. Disarankan untuk menambahkan pengecekan sesi.
+| `proses.php?csrf=1` | GET | Penyedia token CSRF untuk form publik | Publik |
+| `proses.php` | POST | Memproses validasi, upload & simpan data aspirasi | Publik |
+| `terimakasih.html?tiket={kode}` | GET | Halaman konfirmasi + penampil kode tiket aspirasi | Publik |
+| `futaridakeno.php` | GET/POST | Halaman login & proses otentikasi admin | Publik / Admin |
+| `dorimutaimu.php` | GET/POST | Dashboard admin: filter, statistik, pagination, ubah status, ganti password | Admin (session) |
+| `hapus_survei.php` | POST | Handler penghapusan aspirasi tunggal (CSRF + session) | Admin (session) |
+| `aksi_pilih.php` | POST | Handler aksi massal (hapus massal / ubah status massal) | Admin (session) |
+| `export_excel.php` | GET | Ekspor data terfilter ke format Excel (.xls) atau CSV (UTF-8 BOM) | Admin (session) |
+| `mirakuru.php` | GET | Logout admin (catat log + destroy session) | Admin (session) |
 
 ---
 
@@ -469,10 +471,13 @@ Sesi admin akan dihapus dan Anda diarahkan kembali ke halaman login.
 
 | Field | Tipe | Wajib | Keterangan |
 |-------|------|-------|-----------|
+| `csrf_token` | string (hidden) | ✅ Ya | Token keamanan CSRF sesi |
+| `website_hp` | string (hidden) | ❌ Tidak | Kolom Honeypot anti-spam (harus kosong) |
 | `makanan` | string (radio) | ✅ Ya | Kategori pengisi: `Guru`, `Siswa`, `Warga Sekolah`, `Umum` |
-| `makan_perhari` | string (radio) | Jika Siswa | Angkatan: `A'23`, `A'24`, `A'25` |
-| `pengalaman` | string (textarea) | ✅ Ya | Isi teks aspirasi |
-| `foto` | file (image) | ❌ Tidak | File gambar (JPG/JPEG/PNG/GIF) |
+| `makan_perhari` | string (radio) | Jika Siswa | Angkatan: `A'23`, `A'24`, `A'25`, `A'26` |
+| `pengalaman` | string (textarea) | ✅ Ya | Isi teks aspirasi (minimal 10, maksimal 1000 karakter) |
+| `anonim` | int (checkbox) | ❌ Tidak | `1` jika opsi kirim secara anonim dicentang |
+| `foto` | file (image) | ❌ Tidak | File gambar pendukung (JPG/JPEG/PNG/GIF, maks 5MB) |
 
 ---
 
@@ -718,9 +723,9 @@ Stylesheet untuk panel admin (`dorimutaimu.php`). Berisi styling untuk: header, 
 | Item | Detail |
 |------|--------|
 | Nama Proyek | ASFOUR 2025 — Aspiration of Four MMXXV |
-| **Versi** | **v1.0.1** |
+| **Versi** | **v1.1.0** |
 | Tanggal Rilis | 14 November 2026 |
-| Tanggal DB Dibuat | 25 Juni 2025 |
+| Tanggal DB Dibuat | 25 Juni 2025 (Pembaruan Skema: 14 Nov 2026) |
 | PHP Minimum | 7.4 (direkomendasikan 8.x) |
 | MariaDB | 10.4+ |
 | Lisensi | Privat — © 2025 ASFOUR. All Rights Reserved. |
@@ -731,6 +736,29 @@ Stylesheet untuk panel admin (`dorimutaimu.php`). Berisi styling untuk: header, 
 
 Format mengacu pada [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).  
 Proyek ini menggunakan [Semantic Versioning](https://semver.org/lang/id/).
+
+---
+
+### [v1.1.0] — 2026-11-14 *(Feature Release)*
+
+#### Added (Fitur Admin)
+- **Kartu Statistik Agregat**: Menampilkan 4 kartu ringkasan di atas tabel dashboard (Total Aspirasi, Distribusi Status, Kategori Pengisi, dan Distribusi Angkatan Siswa).
+- **Pencarian & Multi-Filter**: Filter teks aspirasi / kode tiket, kategori, angkatan, status, dan rentang tanggal (`tgl_mulai` & `tgl_akhir`).
+- **Pagination Fleksibel**: Pilihan baris per halaman (10, 25, 50) dengan kontrol pagination navigasi lengkap.
+- **Sistem Status Aspirasi**: Penambahan kolom `status` (`Baru`, `Dibaca`, `Ditindaklanjuti`) dengan badge visual dan formulir dropdown ubah status cepat per baris.
+- **Aksi Massal (`aksi_pilih.php`)**: Checkbox per baris + checkbox 'Pilih Semua' untuk menghapus massal atau mengubah status massal dalam satu klik terproteksi CSRF & Prepared Statement.
+- **Pencatatan Audit Lengkap (`log_aktivitas`)**: Merekam otomatis seluruh aktivitas admin (login, logout, hapus tunggal/massal, ubah status, ekspor data, ganti password).
+- **Form Ganti Password Admin**: Fitur ganti password mandiri pada dashboard dengan verifikasi password lama, validasi minimal 8 karakter, konfirmasi, dan enkripsi `password_hash()`.
+- **Ekspor Sinkron CSV (UTF-8 BOM)**: `export_excel.php` kini mematuhi filter pencarian aktif dashboard serta mendukung opsi unduhan CSV ber-BOM UTF-8 agar karakter bahasa Indonesia terbuka sempurna di Excel.
+
+#### Added (Fitur Publik)
+- **Penghitung Karakter**: Tampilan penghitung karakter interaktif pada textarea formulir aspirasi dengan validasi batas (minimal 10, maksimal 1000 karakter) baik di sisi peramban maupun server.
+- **Pratinjau & Kompresi Gambar Klien**: Pratinjau langsung berkas foto sebelum dikirim serta kompresi otomatis via HTML5 Canvas jika ukuran foto melebihi 2 MB.
+- **Opsi Kirim Anonim**: Checkbox pengiriman aspirasi secara anonim bagi pengguna yang menginginkan privasi identitas.
+- **Kode Tiket Pelacakan**: Pembuatan kode unik otomatis (format `ASF-XXXXXX`) yang disimpan ke database dan ditampilkan di halaman terima kasih.
+- **Anti-Spam Ganda**: Kolom tersembunyi Honeypot dan rate-limiting per IP (maksimal 3 pengiriman per jam) berbasis database.
+- **Daftar Angkatan Dinamis**: Rendering otomatis angkatan terpusat di JavaScript (termasuk penambahan angkatan `A'26`).
+- **Kontrol Audio Publik**: Tombol melayang (floating button) untuk mematikan/menyalakan (mute/unmute) musik latar sewaktu-waktu.
 
 ---
 
@@ -780,4 +808,4 @@ Proyek ini menggunakan [Semantic Versioning](https://semver.org/lang/id/).
 
 ---
 
-*README ini dibuat secara menyeluruh berdasarkan analisis seluruh kode sumber proyek ASFOUR 2025 — v1.0.1.*
+*README ini dibuat secara menyeluruh berdasarkan analisis seluruh kode sumber proyek ASFOUR 2025 — v1.1.0.*

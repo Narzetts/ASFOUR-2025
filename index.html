@@ -214,8 +214,32 @@
       transition: max-height .5s ease, opacity .5s ease;
     }
     #angkatanGroup.show {
-      max-height: 200px;
+      max-height: 250px;
       opacity: 1;
+    }
+
+    /* ===== Audio Mute Button ===== */
+    .audio-control-btn {
+      position: fixed;
+      top: 20px;
+      left: 20px;
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      border: 1px solid rgba(255,255,255,0.4);
+      background: rgba(255, 255, 255, 0.9);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+      cursor: pointer;
+      font-size: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      transition: transform 0.2s, background 0.2s;
+    }
+    .audio-control-btn:hover {
+      transform: scale(1.1);
+      background: #ffffff;
     }
 
   </style>
@@ -243,6 +267,10 @@
   <!-- 3. Survey Form -->
   <form id="formSurvei" class="glass-container" action="proses.php" method="POST" enctype="multipart/form-data">
     <input type="hidden" name="csrf_token" id="csrf_token" value="">
+    <!-- Honeypot anti-spam (harus tetap kosong) -->
+    <div style="display:none !important;" aria-hidden="true">
+      <input type="text" name="website_hp" value="" tabindex="-1" autocomplete="off">
+    </div>
     <div class="banner"></div>
     <div class="form-content">
       <h2>𝗔𝘀𝗽𝗶𝗿𝗮𝘁𝗶𝗼𝗻 𝗼𝗳 𝗙𝗼𝘂𝗿 𝗠𝗠𝗫𝗫𝗩</h2>
@@ -254,20 +282,35 @@
 
       <div id="angkatanGroup">
         <label>Angkatan</label>
-        <label><input type="radio" name="makan_perhari" value="A'23" > A'23</label>
-        <label><input type="radio" name="makan_perhari" value="A'24" > A'24</label>
-        <label><input type="radio" name="makan_perhari" value="A'25" > A'25</label>
+        <div id="angkatanList">
+          <!-- Dirender secara dinamis oleh JavaScript -->
+        </div>
       </div>
 
-      <label>Sampaikan Aspirasimu..! 👊</label>
-      <textarea name="pengalaman" placeholder="Tulis di sini…" required></textarea>
+      <label for="pengalaman">Sampaikan Aspirasimu..! 👊</label>
+      <textarea id="pengalaman" name="pengalaman" placeholder="Tulis aspirasimu di sini (minimal 10 karakter, maksimal 1000 karakter)…" minlength="10" maxlength="1000" required></textarea>
+      <div id="charCounter" style="font-size: 12px; color: #666; text-align: right; margin-top: 3px;">
+        0 / 1000 karakter (minimal 10)
+      </div>
 
-      <label>Lampirkan File Pendukung (Opsional)</label>
-      <input type="file" name="foto" accept="image/*">
+      <div style="margin: 12px 0;">
+        <label style="font-weight: 500; cursor: pointer; display: flex; align-items: center; gap: 8px;">
+          <input type="checkbox" name="anonim" value="1" style="transform: scale(1.15);">
+          <span>Kirim secara Anonim (identitas Anda dirahasiakan)</span>
+        </label>
+      </div>
+
+      <label for="inputFoto">Lampirkan File Pendukung (Opsional, maks 5MB)</label>
+      <input type="file" id="inputFoto" name="foto" accept="image/jpeg,image/png,image/gif">
+      <div id="previewContainer" style="display:none; margin-top: 10px; text-align: center;">
+        <img id="imagePreview" src="" alt="Pratinjau Foto" style="max-width: 100%; max-height: 200px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.15);">
+        <p id="compressStatus" style="font-size: 12px; color: #27ae60; margin-top: 5px; display: none;">
+          ⚡ Foto > 2MB dikompres otomatis di peramban sebelum dikirim.
+        </p>
+      </div>
 
       <div class="submit-wrapper">
-        <button class="button-29" type="submit">𝗞𝗶𝗿𝗶𝗺
-</button>
+        <button class="button-29" type="submit" id="btnSubmit">𝗞𝗶𝗿𝗶𝗺</button>
       </div>
     </div>
   </form>
@@ -279,13 +322,27 @@
     <p>Jawaban kamu telah berhasil dikirim. Kami sangat menghargai partisipasimu!</p>
   </div>
 
-  <!-- 5. Tombol Home -->
+  <!-- 5. Tombol Home & Audio Control -->
+  <button type="button" class="audio-control-btn" id="btnAudio" onclick="toggleAudioMute()" title="Nyalakan/Matikan Musik">
+    🔊
+  </button>
   <button class="home-button" id="btnHome" onclick="goHome()">
     <img src="images/t.webp" alt="Home">
   </button>
 
   <script>
-    // Ambil token CSRF dari proses.php saat halaman dimuat
+    // --- 1. Daftar Angkatan Dinamis (mudah ditambah di satu tempat) ---
+    const DAFTAR_ANGKATAN = ["A'23", "A'24", "A'25", "A'26"];
+
+    function renderAngkatan() {
+      const container = document.getElementById('angkatanList');
+      if (!container) return;
+      container.innerHTML = DAFTAR_ANGKATAN.map(ang => 
+        `<label><input type="radio" name="makan_perhari" value="${ang}"> ${ang}</label>`
+      ).join(' ');
+    }
+
+    // --- 2. Ambil token CSRF dari proses.php saat halaman dimuat ---
     function loadCsrfToken() {
       fetch('proses.php?csrf=1')
         .then(response => response.json())
@@ -296,10 +353,27 @@
         })
         .catch(() => {});
     }
-    document.addEventListener('DOMContentLoaded', loadCsrfToken);
+
+    // Inisialisasi saat DOM siap
+    document.addEventListener('DOMContentLoaded', () => {
+      loadCsrfToken();
+      renderAngkatan();
+      initCharCounter();
+      initImageCompressor();
+    });
+
+    // --- 3. Audio & Mute Control ---
+    let isMuted = false;
+    function toggleAudioMute() {
+      const a1 = document.getElementById('bg-music-1');
+      const btn = document.getElementById('btnAudio');
+      isMuted = !isMuted;
+      a1.muted = isMuted;
+      btn.innerText = isMuted ? '🔇' : '🔊';
+      btn.title = isMuted ? 'Nyalakan Musik' : 'Matikan Musik';
+    }
 
     function playMusic() {
-      // Pastikan token sudah terisi jika belum didapat saat awal
       if (!document.getElementById('csrf_token').value) {
         loadCsrfToken();
       }
@@ -307,6 +381,7 @@
       // Mainkan musik
       const a1 = document.getElementById('bg-music-1');
       const a2 = document.getElementById('bg-music-2');
+      a1.muted = isMuted;
       a1.volume = 1; a2.volume = 0;
       a1.play().catch(()=>{}); a2.play().catch(()=>{});
 
@@ -328,16 +403,114 @@
     }
 
     function goHome() {
-      // Kembali ke landing page
       document.getElementById('formSurvei').style.display = 'none';
       document.getElementById('thanks').style.display = 'none';
       document.getElementById('btnHome').style.display = 'none';
       document.getElementById('landing').style.display = 'flex';
-      // Reset audio
       const a1 = document.getElementById('bg-music-1');
       const a2 = document.getElementById('bg-music-2');
       a1.pause(); a2.pause();
       a1.currentTime = 0; a2.currentTime = 0;
+    }
+
+    // --- 4. Penghitung Karakter Textarea (Min 10, Maks 1000) ---
+    function initCharCounter() {
+      const textarea = document.getElementById('pengalaman');
+      const counter = document.getElementById('charCounter');
+      const btnSubmit = document.getElementById('btnSubmit');
+      if (!textarea || !counter) return;
+
+      textarea.addEventListener('input', () => {
+        const len = textarea.value.length;
+        counter.textContent = `${len} / 1000 karakter (minimal 10)`;
+
+        if (len === 0) {
+          counter.style.color = '#666';
+        } else if (len < 10) {
+          counter.style.color = '#e74c3c';
+          counter.textContent += ' — Kurang dari 10 karakter!';
+        } else if (len > 1000) {
+          counter.style.color = '#e74c3c';
+          counter.textContent += ' — Melebihi batas 1000!';
+        } else {
+          counter.style.color = '#27ae60';
+        }
+      });
+    }
+
+    // --- 5. Pratinjau Gambar & Kompresi di Sisi Klien (Canvas bila > 2MB) ---
+    function initImageCompressor() {
+      const input = document.getElementById('inputFoto');
+      const preview = document.getElementById('imagePreview');
+      const previewBox = document.getElementById('previewContainer');
+      const compressStatus = document.getElementById('compressStatus');
+      if (!input) return;
+
+      input.addEventListener('change', function() {
+        compressStatus.style.display = 'none';
+        const file = this.files[0];
+        if (!file) {
+          previewBox.style.display = 'none';
+          preview.src = '';
+          return;
+        }
+
+        // Tampilkan pratinjau awal
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          preview.src = e.target.result;
+          previewBox.style.display = 'block';
+
+          // Jika ukuran > 2MB (2 * 1024 * 1024 bytes), lakukan kompresi canvas
+          if (file.size > 2 * 1024 * 1024 && file.type.startsWith('image/')) {
+            const img = new Image();
+            img.onload = function() {
+              const canvas = document.createElement('canvas');
+              let width = img.width;
+              let height = img.height;
+
+              // Batasi dimensi maksimum 1600px
+              const maxDim = 1600;
+              if (width > maxDim || height > maxDim) {
+                if (width > height) {
+                  height = Math.round((height * maxDim) / width);
+                  width = maxDim;
+                } else {
+                  width = Math.round((width * maxDim) / height);
+                  height = maxDim;
+                }
+              }
+
+              canvas.width = width;
+              canvas.height = height;
+              const ctx = canvas.getContext('2d');
+              ctx.drawImage(img, 0, 0, width, height);
+
+              canvas.toBlob(function(blob) {
+                if (blob && blob.size < file.size) {
+                  const compressedFile = new File([blob], file.name.replace(/\.[^.]+$/, ".jpg"), {
+                    type: "image/jpeg",
+                    lastModified: Date.now()
+                  });
+
+                  // Pasang kembali ke input file menggunakan DataTransfer
+                  try {
+                    const dataTransfer = new DataTransfer();
+                    dataTransfer.items.add(compressedFile);
+                    input.files = dataTransfer.files;
+                    compressStatus.style.display = 'block';
+                    compressStatus.textContent = `⚡ Foto berhasil dikompres (${(file.size / 1024 / 1024).toFixed(2)} MB → ${(compressedFile.size / 1024 / 1024).toFixed(2)} MB).`;
+                  } catch (err) {
+                    console.warn('DataTransfer tidak didukung oleh browser ini:', err);
+                  }
+                }
+              }, 'image/jpeg', 0.75);
+            };
+            img.src = e.target.result;
+          }
+        };
+        reader.readAsDataURL(file);
+      });
     }
   </script>
 </body>

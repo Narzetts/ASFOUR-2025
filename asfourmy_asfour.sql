@@ -8,9 +8,9 @@
 -- Versi PHP: 8.2.12
 --
 -- ============================================================
--- ASFOUR v1.0.0 — Aspiration of Four MMXXV
+-- ASFOUR v1.1.0 — Aspiration of Four MMXXV
 -- Database: asfourmy_asfour
--- Versi Aplikasi  : 1.0.0
+-- Versi Aplikasi  : 1.1.0
 -- Tanggal Rilis   : 2026-11-14
 -- Dibuat dengan   : phpMyAdmin 5.2.1 / MariaDB 10.4.32
 -- ============================================================
@@ -60,6 +60,9 @@ CREATE TABLE `hasil_survei` (
   `makan_perhari` varchar(255) NOT NULL,
   `pengalaman` text DEFAULT NULL,
   `foto` varchar(255) DEFAULT NULL,
+  `status` varchar(50) NOT NULL DEFAULT 'Baru',
+  `kode_tiket` varchar(30) DEFAULT NULL,
+  `anonim` tinyint(1) NOT NULL DEFAULT 0,
   `tanggal` timestamp NOT NULL DEFAULT current_timestamp(),
   `waktu` datetime DEFAULT current_timestamp(),
   `ip_address` varchar(45) DEFAULT NULL
@@ -94,7 +97,11 @@ ALTER TABLE `admin`
 -- Indeks untuk tabel `hasil_survei`
 --
 ALTER TABLE `hasil_survei`
-  ADD PRIMARY KEY (`id`);
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `idx_status` (`status`),
+  ADD KEY `idx_kode_tiket` (`kode_tiket`),
+  ADD KEY `idx_ip_address` (`ip_address`),
+  ADD KEY `idx_waktu` (`waktu`);
 
 --
 -- Indeks untuk tabel `log_aktivitas`

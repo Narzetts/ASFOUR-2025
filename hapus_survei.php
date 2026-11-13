@@ -39,8 +39,18 @@ $stmt = $conn->prepare("DELETE FROM hasil_survei WHERE id = ?");
 $stmt->bind_param("i", $id_int);
 $stmt->execute();
 $stmt->close();
+
+// --- [LOG] Catat aktivitas hapus ---
+$log_stmt = $conn->prepare("INSERT INTO log_aktivitas (username, aktivitas, waktu) VALUES (?, ?, NOW())");
+if ($log_stmt) {
+    $act = "Menghapus aspirasi ID: " . $id_int;
+    $log_stmt->bind_param("ss", $_SESSION['admin'], $act);
+    $log_stmt->execute();
+    $log_stmt->close();
+}
+
 $conn->close();
 
-header("Location: dorimutaimu.php");
+header("Location: dorimutaimu.php?msg=deleted");
 exit;
 ?>
