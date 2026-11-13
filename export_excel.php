@@ -1,4 +1,13 @@
 <?php
+// export_excel.php — ASFOUR v1.0.1
+
+// --- [SEC] Cek sesi admin sebelum mengirim header apapun ---
+session_start();
+if (!isset($_SESSION['admin'])) {
+    header("Location: futaridakeno.php");
+    exit;
+}
+
 $conn = new mysqli("localhost", "root", "", "asfourmy_asfour");
 header("Content-Type: application/vnd.ms-excel");
 header("Content-Disposition: attachment; filename=rekap_asfour.xls");

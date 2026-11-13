@@ -1,5 +1,5 @@
 <?php
-define('APP_VERSION', '1.0.0');
+define('APP_VERSION', '1.0.1');
 
 session_start();
 if (!isset($_SESSION['admin'])) {
@@ -12,16 +12,39 @@ if ($conn->connect_error) {
     die("Koneksi gagal: " . $conn->connect_error);
 }
 
-// Ambil semua data hasil survei
-$result = $conn->query("SELECT * FROM hasil_survei");
+// --- [SEC] Generate CSRF token sekali per sesi ---
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+$csrf_token = $_SESSION['csrf_token'];
 
-// Hapus data jika ada parameter delete
-if (isset($_GET['delete'])) {
-    $id = $_GET['delete'];
-    $conn->query("DELETE FROM hasil_survei WHERE id = $id");
+// --- [SEC] Proses hapus via POST + validasi CSRF + prepared statement ---
+// Menggantikan GET ?delete={id} yang rentan CSRF dan SQL injection
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'hapus') {
+    $token_in  = $_POST['csrf_token'] ?? '';
+    $id_in     = $_POST['id']         ?? '';
+
+    // Validasi token
+    if (!hash_equals($csrf_token, $token_in)) {
+        die("❌ Permintaan tidak valid (CSRF).");
+    }
+    // Validasi id harus integer positif
+    $id_int = filter_var($id_in, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+    if ($id_int === false) {
+        die("❌ ID tidak valid.");
+    }
+
+    $stmt = $conn->prepare("DELETE FROM hasil_survei WHERE id = ?");
+    $stmt->bind_param("i", $id_int);
+    $stmt->execute();
+    $stmt->close();
+
     header("Location: dorimutaimu.php");
     exit;
 }
+
+// Ambil semua data hasil survei
+$result = $conn->query("SELECT * FROM hasil_survei");
 ?>
 
 <!DOCTYPE html>
@@ -116,7 +139,19 @@ echo date('Y-m-d H:i:s');
                         </div>
                     </td>
                     <td>
-                        <a href="dorimutaimu.php?delete=<?= $row['id'] ?>" class="delete-btn" onclick="return confirm('Yakin ingin menghapus data ini?')">Hapus</a>
+                        <?php
+                        // --- [SEC] Tombol Hapus: form POST + CSRF, bukan link GET ---
+                        ?>
+                        <form method="post" style="display:inline;"
+                              onsubmit="return confirm('Yakin ingin menghapus data ini?')">
+                            <input type="hidden" name="action"     value="hapus">
+                            <input type="hidden" name="id"         value="<?= (int)$row['id'] ?>">
+                            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf_token) ?>">
+                            <button type="submit" class="delete-btn"
+                                    style="background:none;border:none;cursor:pointer;font-weight:bold;color:#e74c3c;padding:0;">
+                                Hapus
+                            </button>
+                        </form>
                     </td>
                 </tr>
                 <?php endwhile; ?>

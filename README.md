@@ -479,31 +479,29 @@ Sesi admin akan dihapus dan Anda diarahkan kembali ke halaman login.
 ## 🔒 Keamanan
 
 ### Yang Sudah Diterapkan ✅
-- **bcrypt password hashing** — Password admin tidak disimpan plaintext
-- **Prepared Statements** — `proses.php` dan `futaridakeno.php` menggunakan `mysqli::prepare()` untuk mencegah SQL Injection
-- **Session-based Auth** — Halaman admin dilindungi pengecekan `$_SESSION['admin']`
-- **File Extension Whitelist** — Upload hanya menerima: `jpg`, `jpeg`, `png`, `gif`
-- **Unique Filename** — Nama file upload di-generate ulang dengan `uniqid()` untuk mencegah overwrite
-- **`htmlspecialchars()`** — Output data di dashboard di-escape untuk mencegah XSS
-- **`nl2br()`** pada teks panjang — Mencegah injeksi HTML dari input teks
+- **bcrypt password hashing** — Password admin tidak disimpan plaintext.
+- **Prepared Statements Menyeluruh** — `proses.php`, `futaridakeno.php`, `hapus_survei.php`, dan `dorimutaimu.php` (proses hapus) menggunakan `mysqli::prepare()` untuk mencegah SQL Injection.
+- **Session-based Auth & Proteksi Sesi Lengkap** — Halaman admin (`dorimutaimu.php`, `hapus_survei.php`, dan `export_excel.php`) dilindungi pengecekan `$_SESSION['admin']`.
+- **Session Fixation Prevention** — Pemanggilan `session_regenerate_id(true)` saat login sukses di `futaridakeno.php`.
+- **Anti-Brute Force (Rate Limiting)** — Login admin dibatasi maksimal 5 kali gagal per IP/sesi; jika terlampaui, akses terkunci selama 10 menit.
+- **Pesan Kesalahan Generik** — Form login tidak membocorkan apakah username atau password yang salah guna mencegah user enumeration.
+- **Proteksi CSRF (Cross-Site Request Forgery)** — Token kriptografis acak (`random_bytes(32)`) diterapkan pada pengiriman aspirasi publik (`proses.php`) dan tombol hapus data admin (`dorimutaimu.php` & `hapus_survei.php`).
+- **Aksi Hapus via POST** — Mengubah aksi hapus data dari link GET menjadi form POST terproteksi CSRF untuk mencegah penghapusan data yang tidak disengaja/eksternal.
+- **Validasi File Tingkat Lanjut (finfo MIME + Ekstensi + Ukuran)**:
+  - Whitelist ekstensi ketat: `jpg`, `jpeg`, `png`, `gif`.
+  - Deteksi MIME type riil berbasis konten menggunakan `finfo` (`image/jpeg`, `image/png`, `image/gif`).
+  - Verifikasi struktur gambar menggunakan `getimagesize()`.
+  - Pembatasan ukuran berkas di sisi server (maksimum 5 MB).
+  - Nama berkas acak via `uniqid("img_", true)` untuk mencegah path traversal dan penimpaan file.
+- **Anti-Eksekusi Skrip di `uploads/`** — Aturan Apache pada `.htaccess` root memblokir akses dan eksekusi seluruh skrip (`.php`, `.phtml`, `.phar`, `.cgi`, dll.) di dalam folder `uploads/`.
+- **Header Keamanan HTTP** — Menambahkan header `X-Content-Type-Options: nosniff`, `X-Frame-Options: SAMEORIGIN`, `X-XSS-Protection`, dan `Referrer-Policy`.
+- **Nonaktifkan Directory Listing** — `Options -Indexes` mencegah pengunjung melihat daftar berkas direktori.
+- **Perlindungan File Sensitif** — `.htaccess` memblokir akses langsung ke file database `.sql`, `.htaccess`, dan `php.ini`.
+- **Output Encoding** — `htmlspecialchars()` pada tampilan data untuk mencegah XSS.
 
-### Rekomendasi Keamanan Tambahan ⚠️
-- [ ] Tambahkan pengecekan sesi di `export_excel.php`
-- [ ] Perbaiki query hapus di `dorimutaimu.php` — saat ini rentan SQL injection:
-  ```php
-  // ❌ Tidak aman (baris 19 dorimutaimu.php):
-  $conn->query("DELETE FROM hasil_survei WHERE id = $id");
-  
-  // ✅ Gunakan prepared statement:
-  $stmt = $conn->prepare("DELETE FROM hasil_survei WHERE id = ?");
-  $stmt->bind_param("i", $id);
-  $stmt->execute();
-  ```
-- [ ] Aktifkan HTTPS/SSL pada hosting produksi
-- [ ] Tambahkan CSRF token pada form publik
-- [ ] Tambahkan rate limiting untuk mencegah spam pengisian
-- [ ] Validasi ukuran maksimum file upload di server
-- [ ] Simpan file upload di luar `public_html/` atau tambahkan `.htaccess` di folder `uploads/` untuk mencegah eksekusi PHP
+### Rekomendasi Tambahan ⚠️
+- [ ] Pasang sertifikat SSL/HTTPS aktif pada domain/hosting produksi.
+- [ ] Gunakan Web Application Firewall (WAF) seperti Cloudflare jika diakses publik luas.
 
 ---
 
@@ -720,7 +718,7 @@ Stylesheet untuk panel admin (`dorimutaimu.php`). Berisi styling untuk: header, 
 | Item | Detail |
 |------|--------|
 | Nama Proyek | ASFOUR 2025 — Aspiration of Four MMXXV |
-| **Versi** | **v1.0.0** |
+| **Versi** | **v1.0.1** |
 | Tanggal Rilis | 14 November 2026 |
 | Tanggal DB Dibuat | 25 Juni 2025 |
 | PHP Minimum | 7.4 (direkomendasikan 8.x) |
@@ -733,6 +731,25 @@ Stylesheet untuk panel admin (`dorimutaimu.php`). Berisi styling untuk: header, 
 
 Format mengacu pada [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).  
 Proyek ini menggunakan [Semantic Versioning](https://semver.org/lang/id/).
+
+---
+
+### [v1.0.1] — 2026-11-14 *(Security Hardening Release)*
+
+#### Security
+- **Perlindungan SQL Injection**: Mengubah proses hapus data di `dorimutaimu.php` dan `hapus_survei.php` menggunakan Prepared Statements dengan validasi integer ketat (`filter_var`).
+- **Pencegahan CSRF**: Mengubah aksi hapus data dari tautan GET menjadi form POST terproteksi token CSRF kriptografis; menyisipkan token CSRF pada form pengisian aspirasi di `index.html` dan memvalidasinya di `proses.php`.
+- **Proteksi Akses Ekspor**: Menambahkan verifikasi sesi admin pada `export_excel.php` (mencegah unduhan data tanpa otentikasi).
+- **Anti-Brute Force Login**: Membatasi kesalahan login di `futaridakeno.php` maksimal 5 kali dengan penguncian akun selama 10 menit.
+- **Pencegahan User Enumeration**: Menyeragamkan pesan error login di `futaridakeno.php` agar tidak membedakan keberadaan username.
+- **Pencegahan Session Fixation**: Menambahkan `session_regenerate_id(true)` sesaat setelah autentikasi admin berhasil.
+- **Validasi Berkas Diperketat**: Memeriksa MIME type asli berbasis konten menggunakan PHP `finfo` (`FILEINFO_MIME_TYPE`), membatasi ukuran berkas maksimal 5 MB, dan memeriksa integritas gambar via `getimagesize()`.
+- **Whitelist Input Form**: Membatasi nilai kategori pengisi dan angkatan hanya pada pilihan yang sah.
+- **Pengerasan Server Apache (`.htaccess`)**:
+  - Mematikan directory indexing (`Options -Indexes`).
+  - Memblokir akses dan eksekusi skrip (`.php`, `.phtml`, `.phar`, `.cgi`, dll.) di direktori `uploads/`.
+  - Melindungi berkas sensitif (`.sql`, `.htaccess`, `php.ini`, log).
+  - Menambahkan security headers: `X-Content-Type-Options: nosniff`, `X-Frame-Options: SAMEORIGIN`, `X-XSS-Protection`, dan `Referrer-Policy`.
 
 ---
 
@@ -763,4 +780,4 @@ Proyek ini menggunakan [Semantic Versioning](https://semver.org/lang/id/).
 
 ---
 
-*README ini dibuat secara menyeluruh berdasarkan analisis seluruh kode sumber proyek ASFOUR 2025 — v1.0.0.*
+*README ini dibuat secara menyeluruh berdasarkan analisis seluruh kode sumber proyek ASFOUR 2025 — v1.0.1.*

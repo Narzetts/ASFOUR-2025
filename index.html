@@ -242,6 +242,7 @@
 
   <!-- 3. Survey Form -->
   <form id="formSurvei" class="glass-container" action="proses.php" method="POST" enctype="multipart/form-data">
+    <input type="hidden" name="csrf_token" id="csrf_token" value="">
     <div class="banner"></div>
     <div class="form-content">
       <h2>𝗔𝘀𝗽𝗶𝗿𝗮𝘁𝗶𝗼𝗻 𝗼𝗳 𝗙𝗼𝘂𝗿 𝗠𝗠𝗫𝗫𝗩</h2>
@@ -284,7 +285,25 @@
   </button>
 
   <script>
+    // Ambil token CSRF dari proses.php saat halaman dimuat
+    function loadCsrfToken() {
+      fetch('proses.php?csrf=1')
+        .then(response => response.json())
+        .then(data => {
+          if (data && data.csrf_token) {
+            document.getElementById('csrf_token').value = data.csrf_token;
+          }
+        })
+        .catch(() => {});
+    }
+    document.addEventListener('DOMContentLoaded', loadCsrfToken);
+
     function playMusic() {
+      // Pastikan token sudah terisi jika belum didapat saat awal
+      if (!document.getElementById('csrf_token').value) {
+        loadCsrfToken();
+      }
+
       // Mainkan musik
       const a1 = document.getElementById('bg-music-1');
       const a2 = document.getElementById('bg-music-2');

@@ -1,34 +1,71 @@
 <?php
+// futaridakeno.php — ASFOUR v1.0.1
 session_start();
-$conn = new mysqli("localhost", "root", "", "asfourmy_asfour");
 
+// --- [SEC] Jika sudah login, langsung ke dashboard ---
+if (isset($_SESSION['admin'])) {
+    header("Location: dorimutaimu.php");
+    exit;
+}
+
+// --- [SEC] Rate limiting berbasis sesi/IP — tanpa tabel DB baru ---
+// Simpan counter di session: ['login_fails' => int, 'lock_until' => timestamp]
+$ip        = $_SERVER['REMOTE_ADDR'];
+$lock_key  = 'login_lock_' . md5($ip);   // kunci per-IP di session
+$fail_key  = 'login_fails_' . md5($ip);
+
+$locked_until = $_SESSION[$lock_key] ?? 0;
+$fail_count   = $_SESSION[$fail_key] ?? 0;
+
+$is_locked = (time() < $locked_until);
+$message   = "";
+
+$conn = new mysqli("localhost", "root", "", "asfourmy_asfour");
 if ($conn->connect_error) {
     die("Koneksi gagal: " . $conn->connect_error);
 }
 
-$message = "";
+if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
-if ($_SERVER["REQUEST_METHOD"] == "POST") {
-    $username = trim($_POST["username"]);
-    $password = $_POST["password"];
-
-    $stmt = $conn->prepare("SELECT * FROM admin WHERE username = ?");
-    $stmt->bind_param("s", $username);
-    $stmt->execute();
-    $result = $stmt->get_result();
-    $user = $result->fetch_assoc();
-
-    if (!$user) {
-        $message = "❌ Username tidak ditemukan!";
-    } elseif (!password_verify($password, $user['password'])) {
-        $message = "❌ Password salah!";
+    // --- [SEC] Tolak jika sedang dikunci ---
+    if ($is_locked) {
+        $sisa = ceil(($locked_until - time()) / 60);
+        $message = "⏳ Terlalu banyak percobaan. Coba lagi dalam {$sisa} menit.";
     } else {
-        $_SESSION["admin"] = $user["username"];
-        header("Location: dorimutaimu.php");
-        exit;
-    }
+        $username = trim($_POST["username"] ?? '');
+        $password = $_POST["password"]      ?? '';
 
-    $stmt->close();
+        $stmt = $conn->prepare("SELECT * FROM admin WHERE username = ?");
+        $stmt->bind_param("s", $username);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $user   = $result->fetch_assoc();
+        $stmt->close();
+
+        // --- [SEC] Pesan error generik — tidak membocorkan username/password ---
+        if (!$user || !password_verify($password, $user['password'])) {
+            $_SESSION[$fail_key] = $fail_count + 1;
+
+            // Kunci 10 menit setelah 5 kali gagal
+            if ($_SESSION[$fail_key] >= 5) {
+                $_SESSION[$lock_key] = time() + 600; // 10 menit
+                $_SESSION[$fail_key] = 0;
+                $message = "⏳ Terlalu banyak percobaan. Coba lagi dalam 10 menit.";
+            } else {
+                $sisa_coba = 5 - $_SESSION[$fail_key];
+                $message   = "❌ Username atau password salah. Sisa percobaan: {$sisa_coba}.";
+            }
+        } else {
+            // --- [SEC] Reset counter, regenerate session ID, lalu redirect ---
+            $_SESSION[$fail_key] = 0;
+            unset($_SESSION[$lock_key]);
+            session_regenerate_id(true);            // cegah session fixation
+            $_SESSION["admin"] = $user["username"];
+            $conn->close();
+            header("Location: dorimutaimu.php");
+            exit;
+        }
+    }
 }
 
 $conn->close();
@@ -149,8 +186,9 @@ $conn->close();
 <div class="login-container">
     <h2>Login Admin</h2>
     <?php if ($message): ?>
-        <div class="error"><?= $message ?></div>
+        <div class="error"><?= htmlspecialchars($message) ?></div>
     <?php endif; ?>
+    <?php if (!$is_locked): ?>
     <form method="post">
         <label for="username">Username</label>
         <input type="text" name="username" id="username" required>
@@ -160,6 +198,7 @@ $conn->close();
 
         <button type="submit">Masuk</button>
     </form>
+    <?php endif; ?>
     <div class="footer">© 2025 ASFOUR. All Rights Reserved.</div>
 </div>
 
